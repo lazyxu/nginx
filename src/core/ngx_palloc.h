@@ -31,8 +31,8 @@ typedef void (*ngx_pool_cleanup_pt)(void *data);
 
 typedef struct ngx_pool_cleanup_s  ngx_pool_cleanup_t;
 
-struct ngx_pool_cleanup_s {
-    ngx_pool_cleanup_pt   handler;
+struct ngx_pool_cleanup_s { // 内存池中的清理函数
+    ngx_pool_cleanup_pt   handler; // 函数指针，指向一个函数，参数为 data
     void                 *data;
     ngx_pool_cleanup_t   *next;
 };
@@ -40,28 +40,28 @@ struct ngx_pool_cleanup_s {
 
 typedef struct ngx_pool_large_s  ngx_pool_large_t;
 
-struct ngx_pool_large_s {
+struct ngx_pool_large_s { // 内存池中的大内存块
     ngx_pool_large_t     *next;
     void                 *alloc;
 };
 
 
 typedef struct {
-    u_char               *last;
-    u_char               *end;
-    ngx_pool_t           *next;
-    ngx_uint_t            failed;
-} ngx_pool_data_t;
+    u_char               *last;   // 指向上次分配到的数据字节数，下次从这里开始分配
+    u_char               *end;    // 指向该内存池节点的最后一个字节
+    ngx_pool_t           *next;   // 只想下一个内存池节点
+    ngx_uint_t            failed; // 当前内存池节点分配内存失败次数
+} ngx_pool_data_t;  // 记录某个内存池节点的分配信息
 
 
-struct ngx_pool_s {
-    ngx_pool_data_t       d;
-    size_t                max;
-    ngx_pool_t           *current;
-    ngx_chain_t          *chain;
-    ngx_pool_large_t     *large;
-    ngx_pool_cleanup_t   *cleanup;
-    ngx_log_t            *log;
+struct ngx_pool_s { // 内存池结构，分为 头部信息 和 内存池节点的分配信息，头部信息只有第一个节点才有
+    ngx_pool_data_t       d;       // 该内存池节点的分配信息
+    size_t                max;     // 该内存池节点存储数据的最大字节数
+    ngx_pool_t           *current; // 指向开始分配内存的内存池节点，加快内存分配速度
+    ngx_chain_t          *chain;   // (?)该内存池节点的数据块，以链表的方式存储，创建该内存池时初始化
+    ngx_pool_large_t     *large;   // 该内存池中的大内存块，需要用时再向操作系统申请
+    ngx_pool_cleanup_t   *cleanup; // 用于清理一些保存在内存池节点中的特殊东西，比如临时文件，模块，环境变量，http连接，tcp连接等等
+    ngx_log_t            *log;     // 日志信息
 };
 
 
