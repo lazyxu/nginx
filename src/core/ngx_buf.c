@@ -45,7 +45,7 @@ ngx_create_temp_buf(ngx_pool_t *pool, size_t size)
 
 
 ngx_chain_t *
-ngx_alloc_chain_link(ngx_pool_t *pool)
+ngx_alloc_chain_link(ngx_pool_t *pool) // 分配一个缓冲区结点
 {
     ngx_chain_t  *cl;
 

@@ -58,7 +58,7 @@ struct ngx_pool_s { // 内存池结构，分为 头部信息 和 内存池节点
     ngx_pool_data_t       d;       // 该内存池节点的分配信息
     size_t                max;     // 该内存池节点存储数据的最大字节数
     ngx_pool_t           *current; // 指向开始分配内存的内存池节点，加快内存分配速度
-    ngx_chain_t          *chain;   // (?)该内存池节点的数据块，以链表的方式存储，创建该内存池时初始化
+    ngx_chain_t          *chain;   // 缓冲区链表，每次申请分配内存并后移指针，那么分配出去的内存都是用链表连接在一起的
     ngx_pool_large_t     *large;   // 该内存池中的大内存块，需要用时再向操作系统申请
     ngx_pool_cleanup_t   *cleanup; // 用于清理一些保存在内存池节点中的特殊东西，比如临时文件，模块，环境变量，http连接，tcp连接等等
     ngx_log_t            *log;     // 日志信息
@@ -69,7 +69,7 @@ typedef struct {
     ngx_fd_t              fd;
     u_char               *name;
     ngx_log_t            *log;
-} ngx_pool_cleanup_file_t;
+} ngx_pool_cleanup_file_t; // 清理函数的参数 data 为文件时的数据结构
 
 
 void *ngx_alloc(size_t size, ngx_log_t *log);

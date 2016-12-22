@@ -52,25 +52,25 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
     ngx_core_module_t   *module;
     char                 hostname[NGX_MAXHOSTNAMELEN];
 
-    ngx_timezone_update();
+    ngx_timezone_update(); // 更新时区
 
     /* force localtime update with a new timezone */
 
-    tp = ngx_timeofday();
+    tp = ngx_timeofday(); // 创建缓存时间，降低调用gettimeofday()的时间消耗
     tp->sec = 0;
 
-    ngx_time_update();
+    ngx_time_update(); // 更新时间
 
 
-    log = old_cycle->log;
+    log = old_cycle->log; // 继续使用 old_cycle 的日志
 
-    pool = ngx_create_pool(NGX_CYCLE_POOL_SIZE, log);
+    pool = ngx_create_pool(NGX_CYCLE_POOL_SIZE, log); // 创建线程池，大小为 16*2014 B
     if (pool == NULL) {
         return NULL;
     }
     pool->log = log;
 
-    cycle = ngx_pcalloc(pool, sizeof(ngx_cycle_t));
+    cycle = ngx_pcalloc(pool, sizeof(ngx_cycle_t)); // 向内存池中申请一个 ngx_cycle_t 
     if (cycle == NULL) {
         ngx_destroy_pool(pool);
         return NULL;
@@ -78,10 +78,10 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
 
     cycle->pool = pool;
     cycle->log = log;
-    cycle->old_cycle = old_cycle;
+    cycle->old_cycle = old_cycle; // 继续使用 old_cycle 中的一些数据
 
     cycle->conf_prefix.len = old_cycle->conf_prefix.len;
-    cycle->conf_prefix.data = ngx_pstrdup(pool, &old_cycle->conf_prefix);
+    cycle->conf_prefix.data = ngx_pstrdup(pool, &old_cycle->conf_prefix); // 向内存池申请内存用来存放 src 字符串
     if (cycle->conf_prefix.data == NULL) {
         ngx_destroy_pool(pool);
         return NULL;
@@ -95,13 +95,13 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
     }
 
     cycle->conf_file.len = old_cycle->conf_file.len;
-    cycle->conf_file.data = ngx_pnalloc(pool, old_cycle->conf_file.len + 1);
+    cycle->conf_file.data = ngx_pnalloc(pool, old_cycle->conf_file.len + 1); 
     if (cycle->conf_file.data == NULL) {
         ngx_destroy_pool(pool);
         return NULL;
     }
     ngx_cpystrn(cycle->conf_file.data, old_cycle->conf_file.data,
-                old_cycle->conf_file.len + 1);
+                old_cycle->conf_file.len + 1); // 复制 n 个字符
 
     cycle->conf_param.len = old_cycle->conf_param.len;
     cycle->conf_param.data = ngx_pstrdup(pool, &old_cycle->conf_param);

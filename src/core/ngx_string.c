@@ -30,7 +30,7 @@ ngx_strlow(u_char *dst, u_char *src, size_t n)
 
 
 u_char *
-ngx_cpystrn(u_char *dst, u_char *src, size_t n)
+ngx_cpystrn(u_char *dst, u_char *src, size_t n) // 复制 n 个字符
 {
     if (n == 0) {
         return dst;
@@ -54,7 +54,7 @@ ngx_cpystrn(u_char *dst, u_char *src, size_t n)
 
 
 u_char *
-ngx_pstrdup(ngx_pool_t *pool, ngx_str_t *src)
+ngx_pstrdup(ngx_pool_t *pool, ngx_str_t *src) // 向内存池申请内存用来存放 src 字符串
 {
     u_char  *dst;
 
