@@ -60,7 +60,7 @@ struct ngx_pool_s { // 内存池结构，分为 头部信息 和 内存池节点
     ngx_pool_t           *current; // 指向开始分配内存的内存池节点，加快内存分配速度
     ngx_chain_t          *chain;   // 缓冲区链表，每次申请分配内存并后移指针，那么分配出去的内存都是用链表连接在一起的
     ngx_pool_large_t     *large;   // 该内存池中的大内存块，需要用时再向操作系统申请
-    ngx_pool_cleanup_t   *cleanup; // 用于清理一些保存在内存池节点中的特殊东西，比如临时文件，模块，环境变量，http连接，tcp连接等等
+    ngx_pool_cleanup_t   *cleanup; // 清理函数，用于清理一些保存在内存池节点中的特殊东西，比如临时文件，模块，环境变量，http连接，tcp连接等等
     ngx_log_t            *log;     // 日志信息
 }; // 该内存池节点的数据存储在该结构的后面
 

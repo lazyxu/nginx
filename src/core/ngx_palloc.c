@@ -20,7 +20,7 @@ ngx_create_pool(size_t size, ngx_log_t *log) // 创建内存池
 {
     ngx_pool_t  *p;
 
-    p = ngx_memalign(NGX_POOL_ALIGNMENT, size, log); // 为内存池申请内存，实际上 NGX_POOL_ALIGNMENT 并没有用到，而是用了操作系统自带的申请内存函数，内存自动对齐
+    p = ngx_memalign(NGX_POOL_ALIGNMENT, size, log); // 为内存池申请内存，内存起始地址为 NGX_POOL_ALIGNMENT 的整数倍
     if (p == NULL) {
         return NULL;
     }
@@ -31,7 +31,7 @@ ngx_create_pool(size_t size, ngx_log_t *log) // 创建内存池
     p->d.failed = 0;
 
     size = size - sizeof(ngx_pool_t);
-    p->max = (size < NGX_MAX_ALLOC_FROM_POOL) ? size : NGX_MAX_ALLOC_FROM_POOL; // 设置大节点和小节点的界限，小节点最大不能超过虚拟内存的一页
+    p->max = (size < NGX_MAX_ALLOC_FROM_POOL) ? size : NGX_MAX_ALLOC_FROM_POOL; // 设置大内存和小内存的界限，小内存最大不能超过虚拟内存的一页
 
     p->current = p;
     p->chain = NULL;
@@ -222,8 +222,8 @@ ngx_palloc_large(ngx_pool_t *pool, size_t size) // 向内存池申请大内存
         return NULL;
     }
 
-    n = 0;
-
+    n = 0; // 如果 large 链表的前3项中有 alloc 是指向 null 的，那么将该 alloc 指向 p
+    
     for (large = pool->large; large; large = large->next) {
         if (large->alloc == NULL) {
             large->alloc = p;
@@ -340,7 +340,7 @@ ngx_pool_cleanup_add(ngx_pool_t *p, size_t size) // 增加清理函数
 
 
 void
-ngx_pool_run_cleanup_file(ngx_pool_t *p, ngx_fd_t fd)  // 运行清理文件函数
+ngx_pool_run_cleanup_file(ngx_pool_t *p, ngx_fd_t fd)  // 运行关闭文件函数
 {
     ngx_pool_cleanup_t       *c;
     ngx_pool_cleanup_file_t  *cf;
@@ -361,7 +361,7 @@ ngx_pool_run_cleanup_file(ngx_pool_t *p, ngx_fd_t fd)  // 运行清理文件函�
 
 
 void
-ngx_pool_cleanup_file(void *data)  // 清理文件函数 - 关闭文件
+ngx_pool_cleanup_file(void *data)  // 关闭文件
 {
     ngx_pool_cleanup_file_t  *c = data;
 
@@ -376,7 +376,7 @@ ngx_pool_cleanup_file(void *data)  // 清理文件函数 - 关闭文件
 
 
 void
-ngx_pool_delete_file(void *data)  // 清理文件函数 - 删除并关闭文件
+ngx_pool_delete_file(void *data)  // 删除并关闭文件
 {
     ngx_pool_cleanup_file_t  *c = data;
 
