@@ -3,19 +3,18 @@
 
 ## 为什么需要内存分配策略？
 ```
-nginx这样的程序一定是长时间运行在服务器上的，不能轻易重启
-它对内存的使用很频繁，如果直接用c自带的函数申请内存
-很容易因为造成内存泄漏(忘记释放内存)和内存碎片(长时间申请和释放大小不等的内存块)
-所以这时候需要设计一个统一的，便于管理的内存分配策略
+像http请求这种快速申请快速释放内存资源的，如果用malloc/free来管理内存会有很多次的系统调用
+
 ```
 ## ngx_pool
 ./src/core/ngx_palloc.h/.c
+
 ```
 特点：所有内存块的生命周期和 pool 一样（除了 large 内存块可以单独释放），方便统一管理
 比如一个 http 连接就可以用这样一个 pool，关闭 http 连接时调用 ngx_destroy_pool 进行销毁
 开发者只需要考虑内存的申请而不需要考虑内存的释放
 ```
-![ngx_pool的结构](/ngx_pool.png "ngx_pool的结构")
+<img src="ngx_pool.png" width="100%"></img>
 ### pool 相关
 #### 创建 pool
 ```
@@ -217,8 +216,11 @@ ngx_pool_delete_file(void *data)  // 删除并关闭文件
 
 ## ngx_slab
 ./src/core/ngx_slab.h/.c
-特点：预分配，按照SIZE对内存进行分类管理，避免内存碎片的产生
-![ngx_slab的结构](/ngx_slab.png "ngx_slab的结构")
+```
+基于页的内存分配
+特点：预分配，按照SIZE对内存进行分类管理
+```
+<img src="ngx_slab.png" width="100%"></img>
 ### slab 相关
 #### 初始化 slab
 ```
@@ -273,7 +275,7 @@ void
 ngx_slab_free_locked(ngx_slab_pool_t *pool, void *p)
 ```
 ### 申请和释放 page
-![ngx_slab_page的结构](/ngx_slab_page.png "ngx_slab_page的结构")
+<img src="ngx_slab_page.png" width="100%"></img>
 #### 申请 page
 ```
 static void

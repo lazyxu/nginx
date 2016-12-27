@@ -560,7 +560,7 @@ ngx_slab_free_locked(ngx_slab_pool_t *pool, void *p)
 
             pool->stats[slot].total -= sizeof(uintptr_t) * 8;
 
-            goto done;
+            goto done;       
         }
 
         goto chunk_already_free;
