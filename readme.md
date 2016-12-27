@@ -1,6 +1,20 @@
-# nginx 1.11.7 内存分配
+# nginx 1.11.7 内存分配策略
+源代码中也加了部分注释
 
-## ngx_pool (ngx_palloc.c ngx_palloc.h)
+## 为什么需要内存分配策略？
+```
+nginx这样的程序一定是长时间运行在服务器上的，不能轻易重启
+它对内存的使用很频繁，如果直接用c自带的函数申请内存
+很容易因为造成内存泄漏(忘记释放内存)和内存碎片(长时间申请和释放大小不等的内存块)
+所以这时候需要设计一个统一的，便于管理的内存分配策略
+```
+## ngx_pool
+./src/core/ngx_palloc.h/.c
+```
+特点：所有内存块的生命周期和 pool 一样（除了 large 内存块可以单独释放），方便统一管理
+比如一个 http 连接就可以用这样一个 pool，关闭 http 连接时调用 ngx_destroy_pool 进行销毁
+开发者只需要考虑内存的申请而不需要考虑内存的释放
+```
 ![ngx_pool的结构](/ngx_pool.png "ngx_pool的结构")
 ### pool 相关
 #### 创建 pool
@@ -8,10 +22,10 @@
 ngx_pool_t *
 ngx_create_pool(size_t size, ngx_log_t *log);
 
-    // 为pool申请内存，内存起始地址为 NGX_POOL_ALIGNMENT 的整数倍
+    // 为pool申请内存，内存起始地址为 NGX_POOL_ALIGNMENT（默认为16字节） 的整数倍
     p = ngx_memalign(NGX_POOL_ALIGNMENT, size, log);
 
-    // 设置大内存和小内存的界限，小内存最大不能超过虚拟内存的一页，也不能大于该pool节点可以分配的空间
+    // 设置大内存和小内存的界限，小内存最大不能超过虚拟内存的一页（比如x86是4095），也不能大于该pool节点可以分配的空间
     size = size - sizeof(ngx_pool_t);
     p->max = (size < NGX_MAX_ALLOC_FROM_POOL) ? size : NGX_MAX_ALLOC_FROM_POOL;
     
@@ -202,8 +216,72 @@ ngx_pool_delete_file(void *data)  // 删除并关闭文件
 ```
 
 ## ngx_slab
-    SLAB是一种内存管理机制，其拥有较高的处理效率，同时也有效的避免内存碎片的产生，其核心思想是预分配。
-    其按照SIZE对内存进行分类管理的，当申请一块大小为SIZE的内存时，分配器就从SIZE集合中分配一个内存块(BLOCK)出去，
-    当释放一个大小为SIZE的内存时，则将该内存块放回到原有集合，而不是释放给操作系统。
-    当又要申请相同大小的内存时，可以复用之前被回收的内存块(BLOCK)，从而避免了内存碎片的产生。
+./src/core/ngx_slab.h/.c
+特点：预分配，按照SIZE对内存进行分类管理，避免内存碎片的产生
+![ngx_slab的结构](/ngx_slab.png "ngx_slab的结构")
+### slab 相关
+#### 初始化 slab
+```
+void
+ngx_slab_init(ngx_slab_pool_t *pool)
 
+    // 初始化一些静态全局变量，最大分配空间为页大小的一半，精确分配大小，计算对应位移数
+    if (ngx_slab_max_size == 0) {
+        ngx_slab_max_size = ngx_pagesize / 2; 
+        ngx_slab_exact_size = ngx_pagesize / (8 * sizeof(uintptr_t));
+        for (n = ngx_slab_exact_size; n >>= 1; ngx_slab_exact_shift++) {
+            /* void */
+        }
+    }
+```
+### 申请和释放内存
+```
+void *
+ngx_slab_alloc(ngx_slab_pool_t *pool, size_t size)
+    ngx_shmtx_lock(&pool->mutex);
+    p = ngx_slab_alloc_locked(pool, size);
+    ngx_shmtx_unlock(&pool->mutex);
+void *
+ngx_slab_alloc_locked(ngx_slab_pool_t *pool, size_t size)
+    
+    // size 大于 ngx_slab_max_size 直接分配多个 page，否则计算对应的 slot
+    size > ngx_slab_max_size
+        // 从空闲页链表中分配几个连续的页
+        goto done;
+    // 默认 slot[0] 0～8字节 slot[1] 8～16字节 slot[2] 16～32字节 slot[3] 32～64字节
+    pool->min_size < size <= ngx_slab_max_size
+        shift = 1;
+        for (s = size - 1; s >>= 1; shift++) { /* void */ }
+        slot = shift - pool->min_shift;
+    size <= pool->min_size // 默认为8字节
+        shift = pool->min_shift;
+        slot = 0
+    
+    shift < ngx_slab_exact_shift
+
+    shift == ngx_slab_exact_shift
+
+    shift > ngx_slab_exact_shift
+
+void *
+ngx_slab_calloc(ngx_slab_pool_t *pool, size_t size)
+
+void
+ngx_slab_free(ngx_slab_pool_t *pool, void *p)
+
+void
+ngx_slab_free_locked(ngx_slab_pool_t *pool, void *p)
+```
+### 申请和释放 page
+![ngx_slab_page的结构](/ngx_slab_page.png "ngx_slab_page的结构")
+#### 申请 page
+```
+static void
+ngx_slab_free_pages(ngx_slab_pool_t *pool, ngx_slab_page_t *page,
+    ngx_uint_t pages)
+```
+#### 释放 page
+```
+static ngx_slab_page_t *
+ngx_slab_alloc_pages(ngx_slab_pool_t *pool, ngx_uint_t pages)
+```

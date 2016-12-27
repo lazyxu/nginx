@@ -226,7 +226,7 @@ ngx_slab_alloc_locked(ngx_slab_pool_t *pool, size_t size)
 
             bitmap = (uintptr_t *) ngx_slab_page_addr(pool, page); // 获取分配到的内存的起始地址
 
-            map = (ngx_pagesize >> shift) / (sizeof(uintptr_t) * 8); // 将该页分配成 map*32 个块，用 map 个 uint 来表示这些块的状态
+            map = (ngx_pagesize >> shift) / (sizeof(uintptr_t) * 8); // 将该页分配成 ngx_pagesize >> shift 个块，每个的大小为 1 << shift，用 map 个 uintptr_t 来表示这些块的状态
 
             for (n = 0; n < map; n++) {
 
@@ -245,14 +245,14 @@ ngx_slab_alloc_locked(ngx_slab_pool_t *pool, size_t size)
 
                         pool->stats[slot].used++;
 
-                        if (bitmap[n] == NGX_SLAB_BUSY) { // 如果当前 bitmap 被完全分配掉了，就查找下一个可用的 bitmap
+                        if (bitmap[n] == NGX_SLAB_BUSY) { // 如果当前 bitmap 被完全分配掉了，就看看还有没有可用的 bitmap
                             for (n = n + 1; n < map; n++) {
                                 if (bitmap[n] != NGX_SLAB_BUSY) {
                                     goto done;
                                 }
                             }
 
-                            prev = ngx_slab_page_prev(page);  // 如果找不到可用的 bitmap，那么当前页已经被分配完了，从空闲链表删除
+                            prev = ngx_slab_page_prev(page);  // 如果找不到可用的 bitmap，那么当前页已经被分配完了，从链表移除
                             prev->next = page->next;
                             page->next->prev = page->prev;
 
@@ -265,7 +265,7 @@ ngx_slab_alloc_locked(ngx_slab_pool_t *pool, size_t size)
                 }
             }
 
-        } else if (shift == ngx_slab_exact_shift) { // 如果分配大小正好是精确分配大小，那么用 1 个 uint 就可以表示这些块的状态
+        } else if (shift == ngx_slab_exact_shift) { // 如果分配大小正好是精确分配大小，那么用 1 个 uintptr_t 就可以表示这些块的状态
 
             for (m = 1, i = 0; m; m <<= 1, i++) { // 一位一位对比过去，直到找到能用的块
                 if (page->slab & m) {
@@ -274,7 +274,7 @@ ngx_slab_alloc_locked(ngx_slab_pool_t *pool, size_t size)
 
                 page->slab |= m; // 标记这个位表示的块已经被使用了
 
-                if (page->slab == NGX_SLAB_BUSY) { // 如果当前页已经被占用完，从空闲链表删除，并标记为精确分配
+                if (page->slab == NGX_SLAB_BUSY) { // 如果当前页已经被占用完，从链表移除，并标记为精确分配
                     prev = ngx_slab_page_prev(page);
                     prev->next = page->next;
                     page->next->prev = page->prev;
@@ -305,7 +305,7 @@ ngx_slab_alloc_locked(ngx_slab_pool_t *pool, size_t size)
 
                 page->slab |= m; // 标记当前块已经被分配
 
-                if ((page->slab & NGX_SLAB_MAP_MASK) == mask) { // 如果当前页已经被占用完，从空闲链表删除，并标记为大分配
+                if ((page->slab & NGX_SLAB_MAP_MASK) == mask) { // 如果当前页已经被占用完，从链表移除，并标记为大分配
                     prev = ngx_slab_page_prev(page);
                     prev->next = page->next;
                     page->next->prev = page->prev;
@@ -479,8 +479,8 @@ ngx_slab_free_locked(ngx_slab_pool_t *pool, void *p)
             goto wrong_chunk;
         }
 
-        n = ((uintptr_t) p & (ngx_pagesize - 1)) >> shift;   // slot 块的位置
-        m = (uintptr_t) 1 << (n % (sizeof(uintptr_t) * 8));  // 某个 bitmap 的第几位
+        n = ((uintptr_t) p & (ngx_pagesize - 1)) >> shift;   // page 的偏移地址
+        m = (uintptr_t) 1 << (n % (sizeof(uintptr_t) * 8));  // bitmap 的第几位
         n /= sizeof(uintptr_t) * 8;                          // bitmap 下标
         bitmap = (uintptr_t *)
                              ((uintptr_t) p & ~((uintptr_t) ngx_pagesize - 1)); // p对应的bitmap
@@ -488,10 +488,10 @@ ngx_slab_free_locked(ngx_slab_pool_t *pool, void *p)
         if (bitmap[n] & m) { // 如果第 n 个 bitmap 的第 m 位确实为 1，即这个块确实被使用了
             slot = shift - pool->min_shift; // 得到 slot 
 
-            if (page->next == NULL) { // 如果该页已经被分配完了
+            if (page->next == NULL) { // 如果该页不在 slots 链表中，就插入到 slots[slot].next
                 slots = ngx_slab_slots(pool);
 
-                page->next = slots[slot].next; // 加入到 slots[slot].next 这个环里面
+                page->next = slots[slot].next;
                 slots[slot].next = page;
 
                 page->prev = (uintptr_t) &slots[slot] | NGX_SLAB_SMALL; // 
@@ -540,7 +540,7 @@ ngx_slab_free_locked(ngx_slab_pool_t *pool, void *p)
         if (slab & m) { // 如果 slab 第 m 位确实为 1，即这个块确实被使用了
             slot = ngx_slab_exact_shift - pool->min_shift;
 
-            if (slab == NGX_SLAB_BUSY) {
+            if (slab == NGX_SLAB_BUSY) { // 如果当前页被分配完了，就插入到 slots[slot].next
                 slots = ngx_slab_slots(pool);
 
                 page->next = slots[slot].next;
@@ -580,7 +580,7 @@ ngx_slab_free_locked(ngx_slab_pool_t *pool, void *p)
         if (slab & m) { // 如果 slab 第 m 位确实为 1，即这个块确实被使用了
             slot = shift - pool->min_shift;
 
-            if (page->next == NULL) {
+            if (page->next == NULL) { // 如果该页不在 slots 链表中，就插入到 slots[slot].next
                 slots = ngx_slab_slots(pool);
 
                 page->next = slots[slot].next;
@@ -672,18 +672,18 @@ ngx_slab_alloc_pages(ngx_slab_pool_t *pool, ngx_uint_t pages) // 分配 pages
 
         if (page->slab >= pages) {
 
-            if (page->slab > pages) {  
+            if (page->slab > pages) {  // 如果未分配的页的数量大于 pages
                 page[page->slab - 1].prev = (uintptr_t) &page[pages];
 
-                page[pages].slab = page->slab - pages;
-                page[pages].next = page->next; // page设置成环形
+                page[pages].slab = page->slab - pages; // 剩余可用 page 数量
+                page[pages].next = page->next;
                 page[pages].prev = page->prev;
 
                 p = (ngx_slab_page_t *) page->prev; // 从free中除去page
                 p->next = &page[pages];
                 page->next->prev = (uintptr_t) &page[pages];
 
-            } else {
+            } else { // 如果未分配的页的数量正好等于 pages
                 p = (ngx_slab_page_t *) page->prev; // 从free中除去page
                 p->next = page->next;
                 page->next->prev = page->prev;
@@ -733,7 +733,7 @@ ngx_slab_free_pages(ngx_slab_pool_t *pool, ngx_slab_page_t *page,
         ngx_memzero(&page[1], pages * sizeof(ngx_slab_page_t));
     }
 
-    if (page->next) {
+    if (page->next) {  // 从 slots 中删除
         prev = ngx_slab_page_prev(page);
         prev->next = page->next;
         page->next->prev = page->prev;
@@ -743,7 +743,7 @@ ngx_slab_free_pages(ngx_slab_pool_t *pool, ngx_slab_page_t *page,
 
     if (join < pool->last) {
 
-        if (ngx_slab_page_type(join) == NGX_SLAB_PAGE) {
+        if (ngx_slab_page_type(join) == NGX_SLAB_PAGE) { 
 
             if (join->next != NULL) {
                 pages += join->slab;
