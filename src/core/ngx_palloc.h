@@ -49,7 +49,7 @@ struct ngx_pool_large_s { // 内存池中的大内存块
 typedef struct {
     u_char               *last;   // 指向上次分配到的数据字节数，下次从这里开始分配
     u_char               *end;    // 指向该内存池节点的最后一个字节
-    ngx_pool_t           *next;   // 只想下一个内存池节点
+    ngx_pool_t           *next;   // 指向下一个内存池节点
     ngx_uint_t            failed; // 当前内存池节点分配内存失败次数
 } ngx_pool_data_t;  // 记录某个内存池节点的分配信息
 

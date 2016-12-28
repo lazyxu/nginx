@@ -34,8 +34,8 @@ typedef struct {
 typedef struct {   // slab 结构
     ngx_shmtx_sh_t    lock;       // 共享内存锁
 
-    size_t            min_size;   // 分配空间的最小值
-    size_t            min_shift;  // 该最小值对应的位移数
+    size_t            min_size;   // 分配空间的最小值，默认为8字节
+    size_t            min_shift;  // 该最小值对应的位移数，默认为3
 
     ngx_slab_page_t  *pages;       // 该 slab 中的所有页的数组
     ngx_slab_page_t  *last;        // 指向最后一页
@@ -44,8 +44,8 @@ typedef struct {   // slab 结构
     ngx_slab_stat_t  *stats;       // 每个 slot 的状态
     ngx_uint_t        pfree;       // 空闲页的数量
 
-    u_char           *start;       // 分配地址开始地址
-    u_char           *end;         // 可分配内存的最后字节
+    u_char           *start;       // page数组的开始地址
+    u_char           *end;         // page数组的最后字节
 
     ngx_shmtx_t       mutex;       // 互斥锁
 
